@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:zsdk/zsdk.dart' as Printer;
-import 'dart:io';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -1115,9 +1116,10 @@ class _MyAppState extends State<MyApp> {
           });
           widget.zsdk
               .setPrinterSettingsOverTCPIP(
-                  address: addressIpController.text,
-                  port: int.tryParse(addressPortController.text),
-                  settings: Printer.PrinterSettings.defaultSettings())
+            address: addressIpController.text,
+            port: int.tryParse(addressPortController.text),
+            settings: Printer.PrinterSettings.defaultSettings(),
+          )
               .then((value) {
             setState(() {
               settingsStatus = OperationStatus.SUCCESS;
