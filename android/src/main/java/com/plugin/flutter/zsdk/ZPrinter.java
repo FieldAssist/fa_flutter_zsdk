@@ -12,9 +12,12 @@ import com.zebra.sdk.printer.PrinterStatus;
 import com.zebra.sdk.printer.SGD;
 import com.zebra.sdk.printer.ZebraPrinter;
 import com.zebra.sdk.printer.ZebraPrinterFactory;
+import com.zebra.sdk.graphics.ZebraImageFactory;
+ 
 import com.zebra.sdk.printer.ZebraPrinterLinkOs;
 import com.zebra.sdk.util.internal.FileUtilities;
-
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -26,6 +29,17 @@ import java.util.Map;
 
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.Result;
+
+import android.os.Looper;
+
+import java.io.FileOutputStream;
+
+import io.flutter.plugin.common.MethodChannel.Result;
+
+import com.zebra.sdk.comm.BluetoothConnection;
+import com.zebra.sdk.comm.Connection;
+
+ 
 
 /**
  * Created by luis901101 on 2019-12-18.
@@ -313,6 +327,123 @@ public class ZPrinter
             }
         }).start();
     }
+
+
+public void sendZplOverBluetooth(final String theBtMacAddress, final String imagePath, final PrinterSettings settings, Result result) {
+
+    new Thread(new Runnable() {
+        public void run() {
+            try {
+                System.out.println("******* STARTING *******");
+
+                System.out.println("******** USING IMAGE PATH  ******** => "+  imagePath);
+
+                // Check if the file exists
+                File imageFile = new File(imagePath);
+                if (!imageFile.exists()) {
+                    throw new FileNotFoundException("The file: " + imagePath + " doesn't exist");
+                }
+
+                System.out.println("******** IMAGE PATH FOUND ********");
+
+                // Instantiate connection for given Bluetooth® MAC Address.
+                Connection thePrinterConn = new BluetoothConnection(theBtMacAddress);
+
+                // Initialize
+                Looper.prepare();
+
+                // Open the connection - physical connection is established here.
+                thePrinterConn.open();
+
+                // Set the printer language to ZPL
+                changePrinterLanguage(thePrinterConn, SGDParams.VALUE_ZPL_LANGUAGE);
+
+                System.out.println("******** PRINTER LANGUAGE UPDATED TO ZPL ********"); 
+
+                // Initialize printer configuration
+                printerConf.init(thePrinterConn);
+                // settings.apply(thePrinterConn);
+
+                ZebraPrinter printer = ZebraPrinterFactory.getInstance(thePrinterConn); 
+               
+                // Decode the image from the file path
+                Bitmap bitmap = BitmapFactory.decodeStream(new FileInputStream(imageFile));
+                if (bitmap == null) {
+                    throw new Exception("Failed to decode the image from the path: " + imagePath);
+                }
+
+                 PrinterStatus printerStatus = printer.getCurrentStatus();
+
+                ///for ZQ300 series printer only / 72mm-80mm paper roll
+                int printableWidth = 576; 
+
+                // Get image dimensions
+                int imageWidth = bitmap.getWidth();
+                int imageHeight = bitmap.getHeight();
+
+                // Calculate new height to maintain aspect ratio
+                int newWidth = printableWidth;
+                int newHeight =   (imageHeight * newWidth) / imageWidth;
+
+                // Resize the image based on the printer settings
+                Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true);
+
+                System.out.println("********* SENDING PRINT REQ. *********");
+
+                // Convert the resized Bitmap to ZebraImageAndroid
+                ZebraImageAndroid image = new ZebraImageAndroid(resizedBitmap);
+
+                printer.storeImage("E:TEMP", image, -1, -1);
+
+                // print zpl content by converting imagr into GRF format
+                String zplString =
+                    "^XA"                                          // Start format
+                    + "^PW" + ((int) printableWidth)               // Print width
+                    + "^MNN"                                       // Media tracking mode (Mark-Sense/Continuous)
+                    + "^LL" + newHeight                             // Label length (height)
+                    + "^PR2"                                        // Print rate (equivalent to SPEED 2)
+                    + "^MD50"                                       // Darkness setting (equivalent to TONE 50)
+                    + "^FO0,0^XG" + "TEMP" + ",1,1^FS"              // Draw graphic stored on the printer
+                    + "^XZ";                                        // End format
+
+                    //send the commands to the printer, the image will be printed now
+                    thePrinterConn.write(zplString.getBytes());
+
+                    
+                    //delete the image at the end to prevent printer memory sutaration
+                    thePrinterConn.write(("! U1 do \"file.delete\" \"E:TEMP\"\r\n").getBytes());
+                    
+                    //close the connection with the printer
+                    thePrinterConn.close();
+
+                    resizedBitmap.recycle();
+                    imageFile.delete();
+
+
+                //  printer.printImage( image, 0, 0, newWidth, newHeight, false);
+                // printer.printImage(new ZebraImageAndroid(bufferedImage), 0, 0, -1, -1, false);
+               
+                System.out.println("********* DONE PRINT REQ. *********");
+ 
+                Thread.sleep(500);
+
+                Looper.myLooper().quit();
+
+                result.success(true);
+            } catch (Exception e) {
+                System.out.println(e);
+                // Handle communications error here.
+                e.printStackTrace();
+                result.error("Unable to sent print request","",null);
+            }
+        }
+    }).start();
+}
+
+// Method to resize the bitmap based on the printer's settings
+private Bitmap resizeBitmap(Bitmap bitmap, int width, int height) {
+    return Bitmap.createScaledBitmap(bitmap, width, height, true);
+}
 
     /** @noinspection IOStreamConstructor*/
     public void printZplFileOverTCPIP(final String filePath, final String address, final Integer port) {
