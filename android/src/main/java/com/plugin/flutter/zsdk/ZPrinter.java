@@ -8,6 +8,7 @@ import com.zebra.sdk.comm.Connection;
 import com.zebra.sdk.comm.ConnectionException;
 import com.zebra.sdk.comm.TcpConnection;
 import com.zebra.sdk.graphics.internal.ZebraImageAndroid;
+import com.zebra.sdk.printer.PrinterLanguage;
 import com.zebra.sdk.printer.PrinterStatus;
 import com.zebra.sdk.printer.SGD;
 import com.zebra.sdk.printer.ZebraPrinter;
@@ -34,11 +35,9 @@ import android.os.Looper;
 
 import java.io.FileOutputStream;
 
-import io.flutter.plugin.common.MethodChannel.Result;
-
 import com.zebra.sdk.comm.BluetoothConnection;
 import com.zebra.sdk.comm.Connection;
-
+ 
  
 
 /**
@@ -336,7 +335,7 @@ public void sendZplOverBluetooth(final String theBtMacAddress, final String imag
             try {
                 System.out.println("******* STARTING *******");
 
-                System.out.println("******** USING IMAGE PATH  ******** => "+  imagePath);
+                System.out.println("******** USING IMAGE PATH  ******** =>  "+  imagePath);
 
                 // Check if the file exists
                 File imageFile = new File(imagePath);
@@ -366,6 +365,7 @@ public void sendZplOverBluetooth(final String theBtMacAddress, final String imag
 
                 ZebraPrinter printer = ZebraPrinterFactory.getInstance(thePrinterConn); 
                
+
                 // Decode the image from the file path
                 Bitmap bitmap = BitmapFactory.decodeStream(new FileInputStream(imageFile));
                 if (bitmap == null) {
@@ -377,22 +377,18 @@ public void sendZplOverBluetooth(final String theBtMacAddress, final String imag
                 ///for ZQ300 series printer only / 72mm-80mm paper roll
                 int printableWidth = 576; 
 
-                // Get image dimensions
                 int imageWidth = bitmap.getWidth();
                 int imageHeight = bitmap.getHeight();
 
-                // Calculate new height to maintain aspect ratio
                 int newWidth = printableWidth;
-                int newHeight =   (imageHeight * newWidth) / imageWidth;
+                int newHeight = (imageHeight * newWidth) / imageWidth;
 
-                // Resize the image based on the printer settings
                 Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true);
 
                 System.out.println("********* SENDING PRINT REQ. *********");
 
                 // Convert the resized Bitmap to ZebraImageAndroid
                 ZebraImageAndroid image = new ZebraImageAndroid(resizedBitmap);
-
                 printer.storeImage("E:TEMP", image, -1, -1);
 
                 // print zpl content by converting imagr into GRF format
@@ -406,19 +402,12 @@ public void sendZplOverBluetooth(final String theBtMacAddress, final String imag
                     + "^FO0,0^XG" + "TEMP" + ",1,1^FS"              // Draw graphic stored on the printer
                     + "^XZ";                                        // End format
 
-                    //send the commands to the printer, the image will be printed now
-                    thePrinterConn.write(zplString.getBytes());
+                thePrinterConn.write(zplString.getBytes());
+                thePrinterConn.write(("! U1 do \"file.delete\" \"E:TEMP\"\r\n").getBytes());
+                thePrinterConn.close();
 
-                    
-                    //delete the image at the end to prevent printer memory sutaration
-                    thePrinterConn.write(("! U1 do \"file.delete\" \"E:TEMP\"\r\n").getBytes());
-                    
-                    //close the connection with the printer
-                    thePrinterConn.close();
-
-                    resizedBitmap.recycle();
-                    imageFile.delete();
-
+                resizedBitmap.recycle();
+                imageFile.delete();
 
                 //  printer.printImage( image, 0, 0, newWidth, newHeight, false);
                 // printer.printImage(new ZebraImageAndroid(bufferedImage), 0, 0, -1, -1, false);
@@ -432,9 +421,95 @@ public void sendZplOverBluetooth(final String theBtMacAddress, final String imag
                 result.success(true);
             } catch (Exception e) {
                 System.out.println(e);
-                // Handle communications error here.
                 e.printStackTrace();
                 result.error("Unable to sent print request","",null);
+            }
+        }
+    }).start();
+}
+
+/**
+ * Prints an image over Bluetooth to a CPCL-based Zebra printer (e.g. RW 420).
+ * RW420 was launched in early 2006 and supports only CPCL printing language with legacy firmware,
+ * whereas the ZQ series (ZQ300/ZQ500) is a newer generation printer running Link-OS and primarily uses ZPL.
+ */
+public void sendCPCLOverBluetooth(final String theBtMacAddress, final String imagePath, Result result) {
+
+    new Thread(new Runnable() {
+        public void run() {
+            Connection thePrinterConn = null;
+            try {
+                System.out.println("******* STARTING CPCL (RW 420) *******");
+                System.out.println("******** USING IMAGE PATH ******** => " + imagePath);
+
+                File imageFile = new File(imagePath);
+                if (!imageFile.exists()) {
+                    throw new FileNotFoundException("The file: " + imagePath + " doesn't exist");
+                }
+
+                System.out.println("******** IMAGE PATH FOUND ********");
+
+                thePrinterConn = new BluetoothConnection(theBtMacAddress);
+
+                if (Looper.myLooper() == null) {
+                    Looper.prepare();
+                }
+
+                thePrinterConn.open();
+                System.out.println("******** CONNECTION OPENED ********");
+
+                // Explicitly use CPCL language - required for RW 420 which reports
+                // an unknown/CPCL language and would throw ZebraPrinterLanguageUnknownException
+                // if we used the default getInstance() which relies on SGD language detection.
+                ZebraPrinter printer = ZebraPrinterFactory.getInstance(PrinterLanguage.CPCL, thePrinterConn);
+
+                // Decode the image
+                Bitmap bitmap = BitmapFactory.decodeStream(new FileInputStream(imageFile));
+                if (bitmap == null) {
+                    throw new Exception("Failed to decode the image from the path: " + imagePath);
+                }
+
+                // RW 420 3-inch (72mm) paper: printable width is approx. 576 dots at 203 DPI
+                int printableWidth = 576;
+
+                int imageWidth = bitmap.getWidth();
+                int imageHeight = bitmap.getHeight();
+
+                int newWidth = printableWidth;
+                int newHeight = (imageHeight * newWidth) / imageWidth;
+
+                Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true);
+
+                System.out.println("********* SENDING PRINT REQ. (CPCL) *********");
+
+                // printImage() internally generates the correct CPCL IMAGE command
+                // and sends it over the open connection.
+                ZebraImageAndroid zebraImage = new ZebraImageAndroid(resizedBitmap);
+                printer.printImage(zebraImage, 0, 0, newWidth, newHeight, false);
+
+                System.out.println("********* DONE PRINT REQ. (CPCL) *********");
+
+                resizedBitmap.recycle();
+                imageFile.delete();
+
+                thePrinterConn.close();
+
+                Thread.sleep(500);
+
+                if (Looper.myLooper() != null) {
+                    Looper.myLooper().quit();
+                }
+
+                result.success(true);
+            } catch (Exception e) {
+                System.out.println(e);
+                e.printStackTrace();
+                try {
+                    if (thePrinterConn != null && thePrinterConn.isConnected()) {
+                        thePrinterConn.close();
+                    }
+                } catch (Exception ignored) {}
+                result.error("Unable to send CPCL print request", e.getMessage(), null);
             }
         }
     }).start();

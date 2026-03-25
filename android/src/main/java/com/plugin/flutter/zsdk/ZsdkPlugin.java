@@ -52,6 +52,7 @@ public class ZsdkPlugin implements FlutterPlugin, MethodCallHandler {
   static final String _SET_PRINTER_SETTINGS_OVER_TCP_IP = "setPrinterSettingsOverTCPIP";
   
   static final String _PRINT_IMAGEL_OVER_BLUETOOTH = "printImageOverBluetooth";
+  static final String _PRINT_IMAGE_OVER_BLUETOOTH_CPCL = "printImageOverBluetoothCPCL";
 
   static final String _DO_MANUAL_CALIBRATION_OVER_TCP_IP = "doManualCalibrationOverTCPIP";
   static final String _PRINT_CONFIGURATION_LABEL_OVER_TCP_IP = "printConfigurationLabelOverTCPIP";
@@ -138,10 +139,18 @@ public class ZsdkPlugin implements FlutterPlugin, MethodCallHandler {
           break;
 
           case _PRINT_IMAGEL_OVER_BLUETOOTH:
-          printer.sendZplOverBluetooth(     
+          printer.sendZplOverBluetooth(
               call.argument(_address),
               call.argument(_imageFilePath),
               new PrinterSettings(call.arguments()),
+              result
+          );
+          break;
+
+          case _PRINT_IMAGE_OVER_BLUETOOTH_CPCL:
+          printer.sendCPCLOverBluetooth(
+              call.argument(_address),
+              call.argument(_imageFilePath),
               result
           );
           break;
