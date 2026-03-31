@@ -469,8 +469,8 @@ public void sendCPCLOverBluetooth(final String theBtMacAddress, final String ima
                     throw new Exception("Failed to decode the image from the path: " + imagePath);
                 }
 
-                // RW 420 3-inch (72mm) paper: printable width is approx. 576 dots at 203 DPI
-                int printableWidth = 576;
+                // RW 420 4-inch (104mm) paper: printable width is approx. 832 dots at 203 DPI.
+                int printableWidth = 832;
 
                 int imageWidth = bitmap.getWidth();
                 int imageHeight = bitmap.getHeight();
