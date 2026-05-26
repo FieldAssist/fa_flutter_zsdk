@@ -440,50 +440,55 @@ public void sendCPCLOverBluetooth(final String theBtMacAddress, final String ima
             Connection thePrinterConn = null;
             try {
                 System.out.println("******* STARTING CPCL (RW 420) *******");
-                System.out.println("******** USING IMAGE PATH ******** => " + imagePath);
 
                 File imageFile = new File(imagePath);
                 if (!imageFile.exists()) {
                     throw new FileNotFoundException("The file: " + imagePath + " doesn't exist");
                 }
 
-                System.out.println("******** IMAGE PATH FOUND ********");
-
-                thePrinterConn = new BluetoothConnection(theBtMacAddress);
-
                 if (Looper.myLooper() == null) {
                     Looper.prepare();
                 }
 
+                thePrinterConn = new BluetoothConnection(theBtMacAddress);
                 thePrinterConn.open();
                 System.out.println("******** CONNECTION OPENED ********");
 
-                // Explicitly use CPCL language - required for RW 420 which reports
-                // an unknown/CPCL language and would throw ZebraPrinterLanguageUnknownException
-                // if we used the default getInstance() which relies on SGD language detection.
                 ZebraPrinter printer = ZebraPrinterFactory.getInstance(PrinterLanguage.CPCL, thePrinterConn);
 
-                // Decode the image
-                Bitmap bitmap = BitmapFactory.decodeStream(new FileInputStream(imageFile));
+                BitmapFactory.Options opts = new BitmapFactory.Options();
+                opts.inScaled = false;
+                Bitmap bitmap;
+                try (FileInputStream fis = new FileInputStream(imageFile)) {
+                    bitmap = BitmapFactory.decodeStream(fis, null, opts);
+                }
                 if (bitmap == null) {
                     throw new Exception("Failed to decode the image from the path: " + imagePath);
                 }
 
                 // RW 420 4-inch (104mm) paper: printable width is approx. 832 dots at 203 DPI.
                 int printableWidth = 832;
-
-                int imageWidth = bitmap.getWidth();
-                int imageHeight = bitmap.getHeight();
-
                 int newWidth = printableWidth;
-                int newHeight = (imageHeight * newWidth) / imageWidth;
+                int newHeight = (bitmap.getHeight() * newWidth) / bitmap.getWidth();
 
-                Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true);
+                Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, false);
+                bitmap.recycle();
+
+                // Strip density metadata so the SDK uses our explicit dot values
+                // rather than deriving form height from embedded DPI.
+                resizedBitmap.setDensity(Bitmap.DENSITY_NONE);
 
                 System.out.println("********* SENDING PRINT REQ. (CPCL) *********");
 
-                // printImage() internally generates the correct CPCL IMAGE command
-                // and sends it over the open connection.
+                // Switch to journal (continuous) mode for this job.
+                // ! U1 JOURNAL  — disables gap-sense after PRINT; paper advances exactly
+                //                 the form height and stops (no runaway blank-paper feed).
+                // ! U1 SETFF 50 2 — caps the max advance to 50 units as a safety backstop.
+                // Both are per-job CPCL commands; they do not permanently change printer settings.
+                // NOTE: the correct prefix is "! U1", NOT "! " alone — without U1 the printer
+                // does not recognise these as commands and prints them as literal text.
+                thePrinterConn.write("! U1 JOURNAL\r\n! U1 SETFF 50 2\r\n".getBytes("US-ASCII"));
+
                 ZebraImageAndroid zebraImage = new ZebraImageAndroid(resizedBitmap);
                 printer.printImage(zebraImage, 0, 0, newWidth, newHeight, false);
 
@@ -491,9 +496,7 @@ public void sendCPCLOverBluetooth(final String theBtMacAddress, final String ima
 
                 resizedBitmap.recycle();
                 imageFile.delete();
-
                 thePrinterConn.close();
-
                 Thread.sleep(500);
 
                 if (Looper.myLooper() != null) {
