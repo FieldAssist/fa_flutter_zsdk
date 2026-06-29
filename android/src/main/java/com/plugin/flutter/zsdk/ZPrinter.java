@@ -395,7 +395,7 @@ public void sendZplOverBluetooth(final String theBtMacAddress, final String imag
                 String zplString =
                     "^XA"                                          // Start format
                     + "^PW" + ((int) printableWidth)               // Print width
-                    + "^MNN"                                       // Media tracking mode (Mark-Sense/Continuous)
+                    + "^MNA"                                       // Use printer's own calibrated media setting (safe for label & receipt)
                     + "^LL" + newHeight                             // Label length (height)
                     + "^PR2"                                        // Print rate (equivalent to SPEED 2)
                     + "^MD50"                                       // Darkness setting (equivalent to TONE 50)
@@ -466,8 +466,18 @@ public void sendCPCLOverBluetooth(final String theBtMacAddress, final String ima
                     throw new Exception("Failed to decode the image from the path: " + imagePath);
                 }
 
-                // RW 420 4-inch (104mm) paper: printable width is approx. 832 dots at 203 DPI.
-                int printableWidth = 832;
+                // Query the printer's actual configured print width so this method works
+                // for both the ZQ310 (72mm = 576 dots) and the RW420 (104mm = 832 dots)
+                // without hardcoding a value for either model.
+                int printableWidth;
+                try {
+                    String widthStr = SGD.GET("media.printwidth", thePrinterConn);
+                    printableWidth = Integer.parseInt(widthStr.trim());
+                } catch (Exception e) {
+                    printableWidth = 576; // safe fallback for 72mm ZQ310
+                    System.out.println("WARNING: Could not read media.printwidth via SGD, using fallback "
+                        + printableWidth + ". Error: " + e.getMessage());
+                }
                 int newWidth = printableWidth;
                 int newHeight = (bitmap.getHeight() * newWidth) / bitmap.getWidth();
 
