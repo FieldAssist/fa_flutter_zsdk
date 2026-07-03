@@ -63,6 +63,7 @@ public class ZsdkPlugin implements FlutterPlugin, MethodCallHandler {
   static final String _data = "data";
   static final String _address = "address";
     static final String _imageFilePath = "imageFilePath";
+  static final String _printWidth = "printWidth";
   static final String _port = "port";
   static final String _cmWidth = "cmWidth";
   static final String _cmHeight = "cmHeight";
@@ -143,6 +144,7 @@ public class ZsdkPlugin implements FlutterPlugin, MethodCallHandler {
               call.argument(_address),
               call.argument(_imageFilePath),
               new PrinterSettings(call.arguments()),
+              call.argument(_printWidth),
               result
           );
           break;
@@ -151,6 +153,7 @@ public class ZsdkPlugin implements FlutterPlugin, MethodCallHandler {
           printer.sendCPCLOverBluetooth(
               call.argument(_address),
               call.argument(_imageFilePath),
+              call.argument(_printWidth),
               result
           );
           break;

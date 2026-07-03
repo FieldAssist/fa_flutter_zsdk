@@ -328,7 +328,7 @@ public class ZPrinter
     }
 
 
-public void sendZplOverBluetooth(final String theBtMacAddress, final String imagePath, final PrinterSettings settings, Result result) {
+public void sendZplOverBluetooth(final String theBtMacAddress, final String imagePath, final PrinterSettings settings, final Integer printWidth, Result result) {
 
     new Thread(new Runnable() {
         public void run() {
@@ -374,8 +374,9 @@ public void sendZplOverBluetooth(final String theBtMacAddress, final String imag
 
                  PrinterStatus printerStatus = printer.getCurrentStatus();
 
-                ///for ZQ300 series printer only / 72mm-80mm paper roll
-                int printableWidth = 576; 
+                // Width in dots supplied by the app (paper-roll aware); when
+                // absent keep the historical ZQ300-series 72mm default.
+                int printableWidth = (printWidth != null && printWidth > 0) ? printWidth : 576;
 
                 int imageWidth = bitmap.getWidth();
                 int imageHeight = bitmap.getHeight();
@@ -383,7 +384,14 @@ public void sendZplOverBluetooth(final String theBtMacAddress, final String imag
                 int newWidth = printableWidth;
                 int newHeight = (imageHeight * newWidth) / imageWidth;
 
+                // createScaledBitmap returns the SAME instance when the source
+                // already matches the target size — guard every recycle() on
+                // instance identity or the SDK later throws
+                // "cannot use a recycled source in createBitmap".
                 Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true);
+                if (resizedBitmap != bitmap) {
+                    bitmap.recycle();
+                }
 
                 System.out.println("********* SENDING PRINT REQ. *********");
 
@@ -433,7 +441,7 @@ public void sendZplOverBluetooth(final String theBtMacAddress, final String imag
  * RW420 was launched in early 2006 and supports only CPCL printing language with legacy firmware,
  * whereas the ZQ series (ZQ300/ZQ500) is a newer generation printer running Link-OS and primarily uses ZPL.
  */
-public void sendCPCLOverBluetooth(final String theBtMacAddress, final String imagePath, Result result) {
+public void sendCPCLOverBluetooth(final String theBtMacAddress, final String imagePath, final Integer printWidth, Result result) {
 
     new Thread(new Runnable() {
         public void run() {
@@ -466,23 +474,34 @@ public void sendCPCLOverBluetooth(final String theBtMacAddress, final String ima
                     throw new Exception("Failed to decode the image from the path: " + imagePath);
                 }
 
-                // Query the printer's actual configured print width so this method works
-                // for both the ZQ310 (72mm = 576 dots) and the RW420 (104mm = 832 dots)
-                // without hardcoding a value for either model.
+                // Width in dots supplied by the app — the app knows the loaded
+                // paper roll (58mm vs 72mm), which the printer cannot sense.
+                // Only when absent fall back to the printer's *configured*
+                // print width via SGD (factory default = head width), then 576.
                 int printableWidth;
-                try {
-                    String widthStr = SGD.GET("media.printwidth", thePrinterConn);
-                    printableWidth = Integer.parseInt(widthStr.trim());
-                } catch (Exception e) {
-                    printableWidth = 576; // safe fallback for 72mm ZQ310
-                    System.out.println("WARNING: Could not read media.printwidth via SGD, using fallback "
-                        + printableWidth + ". Error: " + e.getMessage());
+                if (printWidth != null && printWidth > 0) {
+                    printableWidth = printWidth;
+                } else {
+                    try {
+                        String widthStr = SGD.GET("media.printwidth", thePrinterConn);
+                        printableWidth = Integer.parseInt(widthStr.trim());
+                    } catch (Exception e) {
+                        printableWidth = 576; // safe fallback for 72mm ZQ310
+                        System.out.println("WARNING: Could not read media.printwidth via SGD, using fallback "
+                            + printableWidth + ". Error: " + e.getMessage());
+                    }
                 }
                 int newWidth = printableWidth;
                 int newHeight = (bitmap.getHeight() * newWidth) / bitmap.getWidth();
 
+                // createScaledBitmap returns the SAME instance when the source
+                // already matches the target size; recycling it here would make
+                // the SDK throw "cannot use a recycled source in createBitmap"
+                // inside printImage. Guard on instance identity.
                 Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, false);
-                bitmap.recycle();
+                if (resizedBitmap != bitmap) {
+                    bitmap.recycle();
+                }
 
                 // Strip density metadata so the SDK uses our explicit dot values
                 // rather than deriving form height from embedded DPI.

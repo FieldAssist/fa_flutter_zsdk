@@ -63,6 +63,7 @@ class ZSDK {
   static const String _data = "data";
   static const String _address = "address";
   static const String _imageFilePath = 'imageFilePath';
+  static const String _printWidth = 'printWidth';
   static const String _itemCount = 'itemCount';
   static const String _workDir = 'workDir';
   static const String _port = "port";
@@ -193,11 +194,18 @@ class ZSDK {
     Duration? timeout,
     String path = '',
     required PrinterSettings settings,
+
+    /// Target print width in dots. When null the native side keeps its
+    /// current default (576, ZQ300-series 72mm head).
+    int? printWidth,
   }) {
     return _channel.invokeMethod(
       _PRINT_IMAGEL_OVER_BLUETOOTH,
-      <String, dynamic>{_address: address, _imageFilePath: path}
-        ..addAll(settings.toMap()),
+      <String, dynamic>{
+        _address: address,
+        _imageFilePath: path,
+        _printWidth: printWidth,
+      }..addAll(settings.toMap()),
     );
   }
   // Future printZPLOverBluetooth({
@@ -229,10 +237,18 @@ class ZSDK {
     required String address,
     String path = '',
     Duration? timeout,
+
+    /// Target print width in dots. When null the native side falls back to
+    /// the printer-reported width via SGD (media.printwidth), then 576.
+    int? printWidth,
   }) {
     return _channel.invokeMethod(
       _PRINT_IMAGE_OVER_BLUETOOTH_CPCL,
-      <String, dynamic>{_address: address, _imageFilePath: path},
+      <String, dynamic>{
+        _address: address,
+        _imageFilePath: path,
+        _printWidth: printWidth,
+      },
     );
   }
 
