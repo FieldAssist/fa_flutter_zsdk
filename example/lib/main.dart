@@ -161,11 +161,10 @@ class _MyAppState extends State<MyApp> {
                               ),
                               onPressed: () async {
                                 try {
-                                  FilePickerResult? result = await FilePicker
-                                      .platform
-                                      .pickFiles(type: FileType.any);
+                                  PlatformFile? result =
+                                      await FilePicker.pickFile(type: FileType.any);
                                   if (result != null) {
-                                    filePath = result.files.single.path;
+                                    filePath = result.path;
                                     if (filePath != null) {
                                       setState(() {
                                         pathController.text = filePath ?? '';
@@ -193,11 +192,10 @@ class _MyAppState extends State<MyApp> {
                               ),
                               onPressed: () async {
                                 try {
-                                  FilePickerResult? result = await FilePicker
-                                      .platform
-                                      .pickFiles(type: FileType.any);
+                                  PlatformFile? result =
+                                      await FilePicker.pickFile(type: FileType.any);
                                   if (result != null) {
-                                    filePath = result.files.single.path;
+                                    filePath = result.path;
                                     if (filePath != null) {
                                       setState(() {
                                         pathController.text = filePath ?? '';
