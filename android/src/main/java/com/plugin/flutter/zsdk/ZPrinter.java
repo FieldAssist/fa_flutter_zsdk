@@ -403,7 +403,7 @@ public void sendZplOverBluetooth(final String theBtMacAddress, final String imag
                 String zplString =
                     "^XA"                                          // Start format
                     + "^PW" + ((int) printableWidth)               // Print width
-                    + "^MNA"                                       // Use printer's own calibrated media setting (safe for label & receipt)
+                    + "^MNN"                                       // Continuous media: stop at ^LL. ^MNA gap-seeks and feeds blank paper after a receipt.
                     + "^LL" + newHeight                             // Label length (height)
                     + "^PR2"                                        // Print rate (equivalent to SPEED 2)
                     + "^MD50"                                       // Darkness setting (equivalent to TONE 50)
